@@ -2,4 +2,8 @@ node_modules/
 dist/
 .env
 memory.db
+budget.db
+checkpoints.db
+test-memory.db
 output/
+.claude/settings.local.json
