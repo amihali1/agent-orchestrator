@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extractFiles, extractFencedBlock } from "./files";
+import { extractFiles, extractFencedBlock, extractBareFile } from "./files";
 
 describe("extractFiles", () => {
   it("extracts a single file block with a language tag", () => {
@@ -34,5 +34,21 @@ describe("extractFencedBlock", () => {
 
   it("returns undefined when there is no fenced block", () => {
     expect(extractFencedBlock("no code here")).toBeUndefined();
+  });
+});
+
+describe("extractBareFile", () => {
+  it("returns the whole trimmed output as file content", () => {
+    const raw = "using System;\n\npublic class A { }";
+    expect(extractBareFile(raw)).toBe("using System;\n\npublic class A { }\n");
+  });
+
+  it("returns undefined for short single-line output (likely prose/refusal)", () => {
+    expect(extractBareFile("done")).toBeUndefined();
+    expect(extractBareFile("  I cannot do that  ")).toBeUndefined();
+  });
+
+  it("returns undefined for empty output", () => {
+    expect(extractBareFile("")).toBeUndefined();
   });
 });

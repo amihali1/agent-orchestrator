@@ -6,7 +6,7 @@ import { TokenLedger } from "../budget/ledger";
 import { loadBudgetConfig } from "../budget/config";
 import { isPauseSignal } from "../budget/errors";
 import { CheckpointStore, RunState } from "../checkpoint/store";
-import { extractFiles, extractFencedBlock } from "../files";
+import { extractFiles, extractFencedBlock, extractBareFile } from "../files";
 import { loadProfile, ProjectProfile } from "./profile";
 import { gatherContext, renderContext } from "./gather";
 import { assertCleanRepo, createBranch, checkoutBranch, applyFiles, commitAll } from "./apply";
@@ -140,7 +140,7 @@ async function executeWorkspace(
       // Fallback: single known target + a bare fenced block (common with small local
       // models that skip the `## File:` header) → map the block to that one file.
       if (files.size === 0 && gathered.length === 1) {
-        const block = extractFencedBlock(output.output);
+        const block = extractFencedBlock(output.output) ?? extractBareFile(output.output);
         if (block) files.set(gathered[0].path, block);
       }
       if (files.size === 0) {

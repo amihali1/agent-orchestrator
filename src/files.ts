@@ -30,3 +30,15 @@ export function extractFencedBlock(output: string): string | undefined {
   const m = output.match(/```\w*\n([\s\S]*?)```/);
   return m ? m[1].trimEnd() + "\n" : undefined;
 }
+
+/**
+ * Last-resort fallback: some small local models (e.g. qwen3.5) emit neither a
+ * `## File:` header nor a fenced block — just the raw file contents. Only safe when
+ * exactly one target file is known. Returns the trimmed output, or undefined if it's
+ * too short/empty to plausibly be a file.
+ */
+export function extractBareFile(output: string): string | undefined {
+  const trimmed = output.trim();
+  if (trimmed.length < 20 || !trimmed.includes("\n")) return undefined;
+  return trimmed + "\n";
+}
