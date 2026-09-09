@@ -22,7 +22,7 @@ vi.mock("../memory/store", () => ({
   },
 }));
 
-import { runAgent } from "./runner";
+import { runAgent, truncateForInjection } from "./runner";
 
 function makeAgent(name = "engineer"): AgentConfig {
   return { name, systemPrompt: `You are the ${name}.` };
@@ -52,6 +52,9 @@ describe("runAgent", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRecall.mockReturnValue([]);
+    // Route the smart tier through the (mocked) Anthropic SDK, not the real
+    // Claude Agent SDK which would spawn the CLI.
+    process.env.SMART_PROVIDER = "api";
   });
 
   describe("output extraction", () => {
@@ -135,7 +138,7 @@ describe("runAgent", () => {
 
       await runAgent(makeAgent(), makeContext(), 1, false);
 
-      expect(mockRecall).toHaveBeenCalledWith("engineer", "build something");
+      expect(mockRecall).toHaveBeenCalledWith("engineer", "build something", 2);
       // The user message sent to Claude should contain the memory
       const createCall = mockCreate.mock.calls[0][0];
       const userMessage = createCall.messages[0].content;
@@ -288,9 +291,47 @@ describe("runAgent", () => {
       await runAgent(agent, makeContext(), 1);
 
       const call = mockCreate.mock.calls[0][0];
-      expect(call.model).toBe("claude-opus-4-6");
+      expect(call.model).toBe("claude-opus-4-8");
       expect(call.system).toBe("You are the reviewer.");
       expect(call.max_tokens).toBe(16384);
     });
+  });
+
+  describe("memory injection trimming", () => {
+    it("truncates a long recalled memory in the user message", async () => {
+      const huge = "X".repeat(5000);
+      mockRecall.mockReturnValue([
+        {
+          id: "1",
+          agent_name: "engineer",
+          input_hash: "abc",
+          task: "prev",
+          output: huge,
+          reasoning: "r",
+          created_at: "2026-01-01T00:00:00.000Z",
+        },
+      ]);
+      mockCreate.mockResolvedValueOnce(
+        toolUseResponse({ status: "success", output: "code", reasoning: "done" })
+      );
+
+      await runAgent(makeAgent(), makeContext(), 1, false);
+
+      const userMessage = mockCreate.mock.calls[0][0].messages[0].content;
+      expect(userMessage).not.toContain(huge); // full 5000-char blob not injected
+      expect(userMessage).toContain("truncated");
+    });
+  });
+});
+
+describe("truncateForInjection", () => {
+  it("returns text unchanged when under the cap", () => {
+    expect(truncateForInjection("short", 100)).toBe("short");
+  });
+
+  it("truncates and annotates when over the cap", () => {
+    const out = truncateForInjection("abcdefghij", 4);
+    expect(out.startsWith("abcd")).toBe(true);
+    expect(out).toContain("truncated 6 chars");
   });
 });

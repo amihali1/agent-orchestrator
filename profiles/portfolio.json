@@ -1,0 +1,12 @@
+{
+  "name": "portfolio",
+  "path": "C:/Dev/portfolio",
+  "stack": "next-ts",
+  "commands": {
+    "typecheck": "npx tsc --noEmit",
+    "lint": null,
+    "test": null,
+    "e2e": null
+  },
+  "contextGlobs": ["src/**/*.ts", "src/**/*.tsx"]
+}

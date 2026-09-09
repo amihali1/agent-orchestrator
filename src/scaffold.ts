@@ -3,30 +3,9 @@ import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
 import { MemoryRecord } from "./types";
+import { extractFiles } from "./files";
 
 const DB_PATH = path.join(process.cwd(), "memory.db");
-
-/**
- * Extracts file blocks from agent output.
- * Expects format:
- *   ## File: path/to/file.ts
- *   ```typescript
- *   ...code...
- *   ```
- */
-function extractFiles(output: string): Map<string, string> {
-  const files = new Map<string, string>();
-  const pattern = /## File:\s*(.+)\n\s*```\w*\n([\s\S]*?)```/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = pattern.exec(output)) !== null) {
-    const filePath = match[1].trim();
-    const content = match[2].trimEnd() + "\n";
-    files.set(filePath, content);
-  }
-
-  return files;
-}
 
 function getLatestOutputs(db: Database.Database, task: string): Map<string, string> {
   const rows = db

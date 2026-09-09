@@ -63,7 +63,8 @@ describe("runPipeline", () => {
         agents[0],
         expect.objectContaining({ task: "my task" }),
         1,
-        undefined
+        false,
+        expect.anything()
       );
     });
 
@@ -202,11 +203,12 @@ describe("runPipeline", () => {
         agents[0],
         expect.anything(),
         1,
-        true
+        true,
+        expect.anything()
       );
     });
 
-    it("passes noMemory as undefined when not set", async () => {
+    it("normalizes unset noMemory to false", async () => {
       const agents = [makeAgent({ name: "designer" })];
       mockRunAgent.mockResolvedValueOnce(successOutput("spec"));
 
@@ -216,7 +218,8 @@ describe("runPipeline", () => {
         agents[0],
         expect.anything(),
         1,
-        undefined
+        false,
+        expect.anything()
       );
     });
   });

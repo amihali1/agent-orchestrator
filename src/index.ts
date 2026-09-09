@@ -2,10 +2,11 @@ import "dotenv/config";
 import fs from "fs";
 import path from "path";
 import readline from "readline";
-import { runPipeline } from "./pipeline/pipeline";
+import { runAutoResume } from "./pipeline/auto";
 import { engineer, tester, reviewer, designer } from "./agents";
 import { MemoryStore } from "./memory/store";
 import { AgentResult } from "./types";
+import { isPauseSignal, RateLimitError } from "./budget/errors";
 
 const agents = [designer, engineer, tester, reviewer];
 
@@ -90,7 +91,7 @@ async function main() {
 }
 
 async function runFresh(task: string, noMemory = false) {
-  const results = await runPipeline(task, {
+  const results = await runAutoResume(task, {
     agents,
     noMemory,
     onAgentComplete: (result: AgentResult) => {
@@ -117,6 +118,17 @@ async function runFresh(task: string, noMemory = false) {
 }
 
 main().catch((err) => {
+  if (isPauseSignal(err)) {
+    const runId = (err as { runId?: string }).runId;
+    console.log(`\n⏸  Pipeline paused: ${err.message}`);
+    if (err instanceof RateLimitError) {
+      console.log(`   Resume after ${new Date(err.resumeAtMs).toISOString()}.`);
+    }
+    if (runId) {
+      console.log(`   Checkpoint saved. Resume with:  npm run resume -- ${runId}`);
+    }
+    process.exit(0);
+  }
   console.error("Pipeline failed:", err);
   process.exit(1);
 });
