@@ -1,0 +1,12 @@
+{
+  "name": "sticklers-gate",
+  "path": "C:/Dev/sticklers-gate",
+  "stack": "unity-csharp",
+  "commands": {
+    "typecheck": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${GATES}/unity-compile.ps1\" \"C:/Dev/sticklers-gate/SticklersGate\"",
+    "lint": null,
+    "test": null,
+    "e2e": null
+  },
+  "contextGlobs": ["SticklersGate/Assets/_Project/Scripts/**/*.cs"]
+}

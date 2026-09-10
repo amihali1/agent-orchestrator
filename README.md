@@ -104,6 +104,27 @@ npm install
 npm test
 ```
 
+## Workspace mode (edit an existing repo)
+
+Workspace mode runs a task against a real repo behind a **profile** (`profiles/<name>.json`: repo path, verifier gate commands, context globs). It creates an `agent/…` branch, has the engineer edit the gathered files, runs the profile's real gates (build/typecheck/lint/test), and commits on green:
+
+```bash
+npm run workspace -- <project> "<task>" [--files a.ts,b.ts] [--dry-run]
+```
+
+Gate scripts live in `profiles/gates/` and are referenced from a profile via the `${GATES}` token (expanded to an absolute path at load time), so committed profiles stay portable. The Unity gate reads the editor path from `$UNITY_EXE`.
+
+## Backlog mode (many tasks, one branch)
+
+Backlog mode drives an **ordered list of tasks** through workspace mode on a single branch — committing each task on green, so multiple pieces ship with a real gate run between them. It halts on the first task that can't pass its gate, leaving the branch and prior commits for inspection.
+
+```bash
+npm run backlog -- <project> <backlog-file> [--dry-run]
+npm run backlog -- --resume <backlog_id>
+```
+
+`<backlog-file>` is either a `.json` array of task strings or a markdown `- ` checklist. Progress is checkpointed to `backlogs.db` after each task; budget pauses auto-sleep and resume. The run reports billable (Claude) vs free local (Ollama) token usage.
+
 ## Testing
 
 The project includes a test suite built with [Vitest](https://vitest.dev/) covering the memory store, pipeline orchestration, and agent runner.

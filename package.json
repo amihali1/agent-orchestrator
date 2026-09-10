@@ -5,6 +5,7 @@
     "dev": "tsx src/index.ts",
     "resume": "tsx src/resume.ts",
     "workspace": "tsx src/workspace-run.ts",
+    "backlog": "tsx src/backlog-run.ts",
     "agent": "tsx src/run-agent.ts",
     "scaffold": "tsx src/scaffold.ts",
     "build": "tsc",

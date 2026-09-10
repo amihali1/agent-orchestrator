@@ -22,6 +22,21 @@ export interface ProjectProfile {
 
 const PROFILE_DIR = path.join(process.cwd(), "profiles");
 
+/**
+ * Absolute path to the in-repo gate-scripts directory. Committed profiles reference
+ * gate scripts via the `${GATES}` token so they stay portable across machines; it's
+ * expanded to this path at load time.
+ */
+export function gatesDir(dir = PROFILE_DIR): string {
+  return path.join(dir, "gates");
+}
+
+/** Expand the `${GATES}` token in a command string to the absolute gate-scripts dir. */
+function expandGates(command: CommandOrNull, dir: string): CommandOrNull {
+  if (!command) return command;
+  return command.replace(/\$\{GATES\}/g, gatesDir(dir));
+}
+
 /** Load and validate a project profile by name. */
 export function loadProfile(name: string, dir = PROFILE_DIR): ProjectProfile {
   const file = path.join(dir, `${name}.json`);
@@ -34,5 +49,10 @@ export function loadProfile(name: string, dir = PROFILE_DIR): ProjectProfile {
     throw new Error(`Profile "${name}" points at a missing path: ${profile.path}`);
   }
   if (!profile.commands) throw new Error(`Profile "${name}" has no commands block`);
+
+  // Expand ${GATES} in every gate command so committed profiles stay machine-portable.
+  for (const gate of Object.keys(profile.commands) as (keyof ProjectProfile["commands"])[]) {
+    profile.commands[gate] = expandGates(profile.commands[gate], dir);
+  }
   return profile;
 }

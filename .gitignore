@@ -4,6 +4,7 @@ dist/
 memory.db
 budget.db
 checkpoints.db
+backlogs.db
 test-memory.db
 output/
 .claude/settings.local.json
