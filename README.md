@@ -145,7 +145,9 @@ npm run backlog -- <project> --goal "<goal>" [--dry-run]   # plan, then run
 npm run backlog -- --resume <backlog_id>
 ```
 
-`<backlog-file>` is either a `.json` array of task strings or a markdown `- ` checklist. With `--goal`, the Planner generates the task list first and the driver runs it end-to-end. Progress is checkpointed to `backlogs.db` after each task; budget pauses auto-sleep and resume. The run reports billable (Claude) vs free local (Ollama) token usage.
+`<backlog-file>` is either a `.json` array of task strings or a markdown `- ` checklist. With `--goal`, the Planner generates the task list first and the driver runs it end-to-end.
+
+**Cost-tiered retry**: within a task, the engineer starts on its base tier (e.g. free local) and, after `ESCALATE_AFTER` failed gate attempts (default 2, `0` to disable), steps up to the smart tier for the remaining attempts — so a task the free model can't finish escalates to the paid model instead of halting. Escalated (smart) usage shows up in the billable token count. Progress is checkpointed to `backlogs.db` after each task; budget pauses auto-sleep and resume. The run reports billable (Claude) vs free local (Ollama) token usage.
 
 ## Testing
 

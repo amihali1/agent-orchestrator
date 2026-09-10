@@ -1,5 +1,6 @@
-import { AgentResult, PipelineContext } from "../types";
+import { AgentResult, PipelineContext, Tier } from "../types";
 import { runAgent } from "../pipeline/runner";
+import { resolveTier } from "../providers/router";
 import { BudgetTracker } from "../budget/tracker";
 import { extractFiles, extractFencedBlock, extractBareFile } from "../files";
 import { ProjectProfile } from "./profile";
@@ -9,6 +10,7 @@ import { verify, formatFailures } from "./verifier";
 import { workspaceEngineer } from "./agents";
 
 const DEFAULT_MAX_ITERATIONS = 3;
+const DEFAULT_ESCALATE_AFTER = 2;
 
 export interface ExecuteTaskOptions {
   /** Files/globs the engineer edits (relative to repo). Falls back to profile.contextGlobs. */
@@ -18,6 +20,18 @@ export interface ExecuteTaskOptions {
   maxIterations?: number;
   /** Commit message for the green commit (defaults to `agent: <task>`). */
   commitMessage?: string;
+  /** Escalate the engineer to the smart tier after this many failed attempts (0 = never). */
+  escalateAfter?: number;
+}
+
+/**
+ * Cost-tiered retry: which tier the engineer runs on for a given 0-based attempt.
+ * Starts at the base tier and, once `escalateAfter` attempts have failed, steps up to
+ * "smart". A no-op when escalation is disabled or the base tier is already "smart".
+ */
+export function tierForAttempt(baseTier: Tier, attemptIndex: number, escalateAfter: number): Tier {
+  if (escalateAfter > 0 && baseTier !== "smart" && attemptIndex >= escalateAfter) return "smart";
+  return baseTier;
 }
 
 export interface TaskResult {
@@ -45,9 +59,12 @@ export async function executeTask(
   opts: ExecuteTaskOptions = {}
 ): Promise<TaskResult> {
   const maxIter = opts.maxIterations ?? DEFAULT_MAX_ITERATIONS;
+  const escalateAfter = opts.escalateAfter ?? Number(process.env.ESCALATE_AFTER ?? DEFAULT_ESCALATE_AFTER);
+  const baseTier = resolveTier(workspaceEngineer.name, workspaceEngineer.tier);
   const ctx: PipelineContext = { task, history: [] };
   let feedback = "";
   let written: string[] = [];
+  let escalated = false;
 
   for (let iter = 0; iter < maxIter; iter++) {
     // Re-gather each iteration so the engineer sees its own applied edits.
@@ -58,7 +75,14 @@ export async function executeTask(
       ? { task, history: [...ctx.history, feedbackEntry(feedback, iter)] }
       : ctx;
 
-    const output = await runAgent(workspaceEngineer, engineerCtx, iter + 1, true, tracker, cachedPrefix);
+    // Cost-tiered retry: start on the base tier, step up to smart after N failures.
+    const tier = tierForAttempt(baseTier, iter, escalateAfter);
+    if (tier !== baseTier && !escalated) {
+      console.log(`  ⤴ escalating engineer ${baseTier} → ${tier} (attempt ${iter + 1})`);
+      escalated = true;
+    }
+
+    const output = await runAgent(workspaceEngineer, engineerCtx, iter + 1, true, tracker, cachedPrefix, tier);
     ctx.history.push({ ...output, agentName: "engineer", timestamp: new Date(), attempt: iter + 1 });
 
     const files = extractFiles(output.output);
