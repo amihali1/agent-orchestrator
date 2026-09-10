@@ -1,14 +1,18 @@
 import "dotenv/config";
 import fs from "fs";
 import { runBacklog, resumeBacklog, BacklogResult } from "./workspace/backlog";
+import { plan } from "./workspace/planner";
+import { parseTaskList } from "./workspace/tasklist";
 import { withAutoResume } from "./pipeline/auto";
 import { isPauseSignal, RateLimitError } from "./budget/errors";
 
 function usage(): never {
   console.error(
     `Usage: npm run backlog -- <project> <backlog-file> [--dry-run]\n` +
+      `       npm run backlog -- <project> --goal "<goal>" [--dry-run]\n` +
       `       npm run backlog -- --resume <backlog_id> [--dry-run]\n` +
-      `\n<backlog-file>: a .json array of task strings, or a markdown "- " checklist.`
+      `\n<backlog-file>: a .json array of task strings, or a markdown "- " checklist.\n` +
+      `--goal: let the planner generate the task list from a high-level goal, then run it.`
   );
   process.exit(1);
 }
@@ -17,30 +21,21 @@ function parseArgs(argv: string[]) {
   const positional: string[] = [];
   let dryRun = false;
   let resume: string | undefined;
+  let goal: string | undefined;
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--dry-run") dryRun = true;
     else if (a === "--resume") resume = argv[++i];
+    else if (a === "--goal") goal = argv[++i];
     else positional.push(a);
   }
-  return { positional, dryRun, resume };
+  return { positional, dryRun, resume, goal };
 }
 
 /** Read an ordered task list from a JSON array file or a markdown checklist. */
 function loadTasks(file: string): string[] {
-  const raw = fs.readFileSync(file, "utf-8");
-  if (file.toLowerCase().endsWith(".json")) {
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) throw new Error("Backlog JSON must be an array of task strings.");
-    return arr.map((t) => String(t).trim()).filter(Boolean);
-  }
-  const tasks: string[] = [];
-  for (const line of raw.split(/\r?\n/)) {
-    const m = line.match(/^\s*[-*]\s+(?:\[[ xX]\]\s+)?(.+?)\s*$/);
-    if (m) tasks.push(m[1]);
-  }
-  return tasks;
+  return parseTaskList(fs.readFileSync(file, "utf-8"));
 }
 
 function report(r: BacklogResult) {
@@ -57,28 +52,46 @@ function report(r: BacklogResult) {
   console.log(`  tokens: ${r.tokens.run} billable (Claude) · ${r.tokens.local} local (Ollama, free)`);
 }
 
-async function main() {
-  const { positional, dryRun, resume } = parseArgs(process.argv.slice(2));
+async function resolveTasks(project: string, goal: string): Promise<string[]> {
+  console.log(`Planning goal for ${project}: ${goal}`);
+  const { tasks, tokens } = await plan(project, goal);
+  console.log(`Planner produced ${tasks.length} task(s):`);
+  tasks.forEach((t, i) => console.log(`  ${i + 1}. ${t}`));
+  console.log(`  planning tokens: ${tokens.run} billable (Claude) · ${tokens.local} local (Ollama, free)`);
+  return tasks;
+}
 
-  const result = resume
-    ? await withAutoResume(
-        () => resumeBacklog(resume, { dryRun }),
-        (id) => resumeBacklog(id, { dryRun })
-      )
-    : await (async () => {
-        const [project, file] = positional;
-        if (!project || !file) usage();
-        const tasks = loadTasks(file);
-        if (tasks.length === 0) {
-          console.error(`No tasks parsed from ${file}`);
-          process.exit(1);
-        }
-        console.log(`Loaded ${tasks.length} task(s) from ${file}`);
-        return withAutoResume(
-          () => runBacklog(project, tasks, { dryRun }),
-          (id) => resumeBacklog(id, { dryRun })
-        );
-      })();
+async function main() {
+  const { positional, dryRun, resume, goal } = parseArgs(process.argv.slice(2));
+
+  let result: BacklogResult;
+  if (resume) {
+    result = await withAutoResume(
+      () => resumeBacklog(resume, { dryRun }),
+      (id) => resumeBacklog(id, { dryRun })
+    );
+  } else {
+    const [project, file] = positional;
+    if (!project) usage();
+
+    let tasks: string[];
+    if (goal) {
+      tasks = await resolveTasks(project, goal);
+    } else {
+      if (!file) usage();
+      tasks = loadTasks(file);
+      if (tasks.length === 0) {
+        console.error(`No tasks parsed from ${file}`);
+        process.exit(1);
+      }
+      console.log(`Loaded ${tasks.length} task(s) from ${file}`);
+    }
+
+    result = await withAutoResume(
+      () => runBacklog(project, tasks, { dryRun }),
+      (id) => resumeBacklog(id, { dryRun })
+    );
+  }
 
   report(result);
 }

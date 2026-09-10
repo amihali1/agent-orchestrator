@@ -54,3 +54,44 @@ export function renderContext(files: GatheredFile[]): string {
     files.map((f) => `## File: ${f.path}\n\`\`\`\n${f.content}\n\`\`\``).join("\n\n")
   );
 }
+
+const IGNORE = [
+  "**/node_modules/**",
+  "**/.next/**",
+  "**/dist/**",
+  "**/out/**",
+  "**/.git/**",
+  // Build/cache dirs (Unity, VS) — noise that would crowd out real source in the cap.
+  "**/Library/**",
+  "**/Temp/**",
+  "**/Logs/**",
+  "**/obj/**",
+  "**/.vs/**",
+];
+const README_MAX_BYTES = 8_000;
+
+/**
+ * List repo file paths (no contents) for the planner — cheap, structural context.
+ * Same ignores as gatherContext, sorted, capped at `maxFiles`.
+ */
+export async function listRepoFiles(profile: ProjectProfile, maxFiles = 500): Promise<string[]> {
+  const matches = await fg("**/*", {
+    cwd: profile.path,
+    onlyFiles: true,
+    dot: false,
+    ignore: IGNORE,
+  });
+  matches.sort();
+  return matches.slice(0, maxFiles);
+}
+
+/** Render the planner's cached prefix: a repo file list plus README (truncated) if present. */
+export function renderPlanContext(paths: string[], readme?: string): string {
+  const parts = [
+    `# Repository file list (${paths.length} path(s))\n` + paths.map((p) => `- ${p}`).join("\n"),
+  ];
+  if (readme && readme.trim()) {
+    parts.push(`# README\n\`\`\`\n${readme.slice(0, README_MAX_BYTES)}\n\`\`\``);
+  }
+  return parts.join("\n\n");
+}
