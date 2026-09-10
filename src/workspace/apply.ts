@@ -80,3 +80,12 @@ export function currentBranch(repoPath: string): string {
 export function checkoutBranch(repoPath: string, branch: string): void {
   git(repoPath, ["checkout", branch]);
 }
+
+/**
+ * Discard all working-tree and index changes, returning to the current branch tip.
+ * Used on backlog resume to drop partial edits from a task that was interrupted
+ * mid-flight, so it can be re-run cleanly from the last committed task.
+ */
+export function resetHard(repoPath: string): void {
+  git(repoPath, ["reset", "--hard", "HEAD"]);
+}
