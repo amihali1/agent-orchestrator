@@ -82,6 +82,18 @@ export function checkoutBranch(repoPath: string, branch: string): void {
 }
 
 /**
+ * Initialize a fresh git repo at `repoPath` with `main` as the initial branch and a
+ * repo-local commit identity, so `commitAll` works even where no global git identity
+ * is configured (CI, clean machines).
+ */
+export function initRepo(repoPath: string): void {
+  git(repoPath, ["init", "-b", "main"]);
+  git(repoPath, ["config", "user.email", "agent@orchestrator.local"]);
+  git(repoPath, ["config", "user.name", "agent-orchestrator"]);
+  git(repoPath, ["config", "commit.gpgsign", "false"]);
+}
+
+/**
  * Discard all working-tree and index changes, returning to the current branch tip.
  * Used on backlog resume to drop partial edits from a task that was interrupted
  * mid-flight, so it can be re-run cleanly from the last committed task.

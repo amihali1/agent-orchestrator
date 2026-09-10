@@ -114,6 +114,16 @@ npm run workspace -- <project> "<task>" [--files a.ts,b.ts] [--dry-run]
 
 Gate scripts live in `profiles/gates/` and are referenced from a profile via the `${GATES}` token (expanded to an absolute path at load time), so committed profiles stay portable. The Unity gate reads the editor path from `$UNITY_EXE`.
 
+## Bootstrap (start a project from nothing)
+
+Bootstrap turns nothing into a minimal, gate-green git repo plus a registered profile, so the plan/backlog spine can build a brand-new project from a goal.
+
+```bash
+npm run bootstrap -- <name> [--goal "<goal>"] [--base <dir>] [--no-install]
+```
+
+It writes a TS/Node skeleton (`package.json`, `tsconfig`, `src` + a passing test), runs `git init` + an initial commit, `npm install`s, and saves `profiles/<name>.json` (gates: `tsc --noEmit` + `vitest run`). With `--goal`, it then plans and runs the backlog on the fresh repo. Projects are created under `$BOOTSTRAP_BASE` (default `C:/Dev`) unless `--base` is given.
+
 ## Planning (goal → task list)
 
 The Planner turns a one-line goal into an ordered task backlog (the same format the backlog driver consumes). It sees a cheap structural context — the repo file list plus README — and returns a task list, without touching git.
