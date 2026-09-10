@@ -65,7 +65,13 @@ async function executeRun(state: RunState, options: PipelineOptions): Promise<Ag
   const store = options.checkpoint ?? new CheckpointStore();
   const tracker =
     options.tracker ??
-    new BudgetTracker(loadBudgetConfig(), new TokenLedger(), () => new Date(), state.runTokens);
+    new BudgetTracker(
+      loadBudgetConfig(),
+      new TokenLedger(),
+      () => new Date(),
+      state.runTokens,
+      state.localTokens ?? 0
+    );
 
   const context: PipelineContext = { task: state.task, history: [...state.history] };
   const retryCounts = new Map<string, number>(Object.entries(state.retryCounts));
@@ -99,7 +105,8 @@ async function executeRun(state: RunState, options: PipelineOptions): Promise<Ag
       const b = tracker.snapshot();
       console.log(
         `  tokens: run ${b.runTokens}${b.maxRun ? "/" + b.maxRun : ""}` +
-          ` · day ${b.dayTokens}${b.maxDay ? "/" + b.maxDay : ""}`
+          ` · day ${b.dayTokens}${b.maxDay ? "/" + b.maxDay : ""}` +
+          (b.localTokens ? ` · local ${b.localTokens}` : "")
       );
 
       // Persist the advanced state, then enforce caps (may throw a pause signal).
@@ -107,6 +114,7 @@ async function executeRun(state: RunState, options: PipelineOptions): Promise<Ag
       state.retryCounts = Object.fromEntries(retryCounts);
       state.history = context.history;
       state.runTokens = b.runTokens;
+      state.localTokens = b.localTokens;
       touch(state);
       store.save(state);
 
@@ -126,7 +134,9 @@ async function executeRun(state: RunState, options: PipelineOptions): Promise<Ag
     state.status = isPauseSignal(err) ? "paused" : "failed";
     state.pausedReason = err instanceof Error ? err.message : String(err);
     state.history = context.history;
-    state.runTokens = tracker.snapshot().runTokens;
+    const errSnap = tracker.snapshot();
+    state.runTokens = errSnap.runTokens;
+    state.localTokens = errSnap.localTokens;
     touch(state);
     store.save(state);
     if (isPauseSignal(err)) (err as { runId?: string }).runId = state.runId;

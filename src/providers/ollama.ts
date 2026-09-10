@@ -13,13 +13,18 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 
 interface OllamaChatResponse {
   message?: { content?: string };
+  /** Tokens in the prompt Ollama evaluated (input). */
+  prompt_eval_count?: number;
+  /** Tokens Ollama generated (output). */
+  eval_count?: number;
 }
 
 /**
  * Provider backed by a local/remote Ollama server (default: homelab 10.0.0.47).
  * No native tool-use, so the structured-output contract is embedded in the system
  * prompt (OUTPUT_SCHEMA_PROMPT) and enforced with `format: "json"`. Local inference
- * is free, so usage is reported as zero — it never consumes the Claude token budget.
+ * is free, so the reported usage is flagged `billable: false` — the token counts are
+ * still surfaced for visibility, but never consume the Claude token budget.
  *
  * Cost here is wall-clock, not tokens, so output is NOT length-capped (capping only
  * risks truncation); a request timeout guards against a runaway generation instead.
@@ -79,7 +84,13 @@ export class OllamaProvider implements Provider {
     const content = (data.message?.content ?? "").trim();
     const output = parseAgentOutput(extractJson(content), content);
 
-    const usage: Usage = { inputTokens: 0, outputTokens: 0 };
+    // Report real token counts for visibility, but flag them non-billable so the
+    // budget tracker never charges free local inference against the Claude caps.
+    const usage: Usage = {
+      inputTokens: data.prompt_eval_count ?? 0,
+      outputTokens: data.eval_count ?? 0,
+      billable: false,
+    };
     return { output, usage, provider: "ollama", model: this.model };
   }
 }

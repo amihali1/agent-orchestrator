@@ -32,6 +32,8 @@ export interface WorkspaceResult {
   commit?: string;
   written: string[];
   failureSummary?: string;
+  /** Token usage for the run: billable Claude tokens and free local (Ollama) tokens. */
+  tokens: { run: number; local: number };
 }
 
 const MAX_ITERATIONS = 3;
@@ -78,7 +80,15 @@ export async function resumeWorkspace(
   if (!state.projectName || !state.branch) throw new Error(`Run ${runId} is not a workspace run`);
   if (state.status === "done") {
     console.log(`Run ${runId} already completed.`);
-    return { ok: true, runId, branch: state.branch, iterations: state.iteration ?? 0, committed: true, written: [] };
+    return {
+      ok: true,
+      runId,
+      branch: state.branch,
+      iterations: state.iteration ?? 0,
+      committed: true,
+      written: [],
+      tokens: { run: state.runTokens, local: state.localTokens ?? 0 },
+    };
   }
   const profile = loadProfile(state.projectName);
   checkoutBranch(profile.path, state.branch);
@@ -94,7 +104,13 @@ async function executeWorkspace(
   const store = opts.checkpoint ?? new CheckpointStore();
   const tracker =
     opts.tracker ??
-    new BudgetTracker(loadBudgetConfig(), new TokenLedger(), () => new Date(), state.runTokens);
+    new BudgetTracker(
+      loadBudgetConfig(),
+      new TokenLedger(),
+      () => new Date(),
+      state.runTokens,
+      state.localTokens ?? 0
+    );
   const maxIter = opts.maxIterations ?? MAX_ITERATIONS;
   const branch = state.branch!;
 
@@ -150,7 +166,9 @@ async function executeWorkspace(
       console.log(`  applied ${written.length} file(s): ${written.join(", ")}`);
 
       // Persist progress, then enforce budget (may pause here).
-      state.runTokens = tracker.snapshot().runTokens;
+      const snap = tracker.snapshot();
+      state.runTokens = snap.runTokens;
+      state.localTokens = snap.localTokens;
       state.history = ctx.history;
       state.updatedAt = new Date().toISOString();
       store.save(state);
@@ -168,7 +186,16 @@ async function executeWorkspace(
         state.status = "done";
         state.updatedAt = new Date().toISOString();
         store.save(state);
-        return { ok: true, runId: state.runId, branch, iterations: iter + 1, committed: !opts.dryRun, commit, written };
+        return {
+          ok: true,
+          runId: state.runId,
+          branch,
+          iterations: iter + 1,
+          committed: !opts.dryRun,
+          commit,
+          written,
+          tokens: { run: snap.runTokens, local: snap.localTokens },
+        };
       }
 
       feedback = formatFailures(v);
@@ -179,11 +206,23 @@ async function executeWorkspace(
     state.pausedReason = "verifier still failing after max iterations";
     state.updatedAt = new Date().toISOString();
     store.save(state);
-    return { ok: false, runId: state.runId, branch, iterations: maxIter, committed: false, written, failureSummary: feedback };
+    const failSnap = tracker.snapshot();
+    return {
+      ok: false,
+      runId: state.runId,
+      branch,
+      iterations: maxIter,
+      committed: false,
+      written,
+      failureSummary: feedback,
+      tokens: { run: failSnap.runTokens, local: failSnap.localTokens },
+    };
   } catch (err) {
     state.status = isPauseSignal(err) ? "paused" : "failed";
     state.pausedReason = err instanceof Error ? err.message : String(err);
-    state.runTokens = tracker.snapshot().runTokens;
+    const errSnap = tracker.snapshot();
+    state.runTokens = errSnap.runTokens;
+    state.localTokens = errSnap.localTokens;
     state.history = ctx.history;
     state.updatedAt = new Date().toISOString();
     store.save(state);

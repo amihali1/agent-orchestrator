@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { OllamaProvider } from "./ollama";
 import { OUTPUT_SCHEMA_PROMPT } from "./types";
 
-function okResponse(content: string) {
-  return { ok: true, json: async () => ({ message: { content } }) };
+function okResponse(content: string, counts?: { prompt_eval_count?: number; eval_count?: number }) {
+  return { ok: true, json: async () => ({ message: { content }, ...counts }) };
 }
 
 const req = { system: "You are a formatter.", userMessage: "format this", maxTokens: 256 };
@@ -32,11 +32,14 @@ describe("OllamaProvider", () => {
     expect(body.messages[1]).toEqual({ role: "user", content: "format this" });
   });
 
-  it("parses the JSON content into an AgentOutput and reports zero usage", async () => {
+  it("parses the JSON content into an AgentOutput and reports non-billable token counts", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        okResponse('{"status":"needs_revision","output":"","reasoning":"bug","feedback":"fix line 3"}')
+        okResponse(
+          '{"status":"needs_revision","output":"","reasoning":"bug","feedback":"fix line 3"}',
+          { prompt_eval_count: 120, eval_count: 45 }
+        )
       )
     );
 
@@ -44,8 +47,18 @@ describe("OllamaProvider", () => {
 
     expect(output.status).toBe("needs_revision");
     expect(output.feedback).toBe("fix line 3");
-    expect(usage).toEqual({ inputTokens: 0, outputTokens: 0 });
+    expect(usage).toEqual({ inputTokens: 120, outputTokens: 45, billable: false });
     expect(provider).toBe("ollama");
+  });
+
+  it("reports zero counts (still non-billable) when Ollama omits token fields", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(okResponse('{"status":"success","output":"x","reasoning":"y"}'))
+    );
+
+    const { usage } = await new OllamaProvider("qwen3.5:9b").complete(req);
+    expect(usage).toEqual({ inputTokens: 0, outputTokens: 0, billable: false });
   });
 
   it("extracts a JSON block when the model wraps it in stray text", async () => {
