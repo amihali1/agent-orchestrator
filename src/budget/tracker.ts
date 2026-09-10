@@ -8,6 +8,8 @@ export interface BudgetSnapshot {
   dayTokens: number;
   maxRun: number;
   maxDay: number;
+  /** Free local (Ollama) tokens used this run — counted for visibility, never charged. */
+  localTokens: number;
 }
 
 /**
@@ -20,14 +22,17 @@ export interface BudgetSnapshot {
  */
 export class BudgetTracker {
   private runTokens: number;
+  private localTokens: number;
 
   constructor(
     private readonly config: BudgetConfig,
     private readonly ledger: TokenLedger,
     private readonly now: () => Date = () => new Date(),
-    startRunTokens = 0
+    startRunTokens = 0,
+    startLocalTokens = 0
   ) {
     this.runTokens = startRunTokens;
+    this.localTokens = startLocalTokens;
   }
 
   /** UTC day key. */
@@ -35,10 +40,18 @@ export class BudgetTracker {
     return this.now().toISOString().slice(0, 10);
   }
 
-  /** Add a completion's tokens to the run total and the persistent day ledger. */
+  /**
+   * Add a completion's tokens to the totals. Billable (Claude) tokens go to the run
+   * total and the persistent day ledger; non-billable (local/Ollama) tokens are
+   * tallied separately for visibility and never touch the budget caps.
+   */
   record(usage: Usage): void {
     const n = usage.inputTokens + usage.outputTokens;
     if (n <= 0) return;
+    if (usage.billable === false) {
+      this.localTokens += n;
+      return;
+    }
     this.runTokens += n;
     this.ledger.add(this.today(), n);
   }
@@ -62,6 +75,7 @@ export class BudgetTracker {
       dayTokens: this.ledger.get(this.today()),
       maxRun: this.config.maxTokensPerRun,
       maxDay: this.config.maxTokensPerDay,
+      localTokens: this.localTokens,
     };
   }
 }

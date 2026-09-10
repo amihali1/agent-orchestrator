@@ -34,6 +34,17 @@ describe("BudgetTracker", () => {
       t.record(usage(0, 0));
       expect(t.snapshot().runTokens).toBe(0);
     });
+
+    it("tallies non-billable (local) tokens separately without touching the budget", () => {
+      const t = tracker({ maxTokensPerRun: 100 });
+      t.record({ inputTokens: 500, outputTokens: 300, billable: false });
+      const s = t.snapshot();
+      expect(s.localTokens).toBe(800);
+      expect(s.runTokens).toBe(0);
+      expect(s.dayTokens).toBe(0);
+      // Well over the run cap, but non-billable, so no pause fires.
+      expect(() => t.assertWithinBudget()).not.toThrow();
+    });
   });
 
   describe("assertWithinBudget", () => {

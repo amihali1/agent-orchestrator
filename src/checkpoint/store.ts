@@ -16,6 +16,8 @@ export interface RunState {
   retryCounts: Record<string, number>;
   history: AgentResult[];
   runTokens: number;
+  /** Free local (Ollama) tokens used this run — counted for visibility, never charged. */
+  localTokens?: number;
   /** Agent names in pipeline order, used to re-bind configs on resume. */
   agentNames: string[];
   noMemory: boolean;
@@ -36,6 +38,7 @@ interface Row {
   retry_counts: string;
   history: string;
   run_tokens: number;
+  local_tokens: number;
   agent_names: string;
   no_memory: number;
   paused_reason: string | null;
@@ -60,6 +63,7 @@ function rowToState(row: Row): RunState {
     retryCounts: JSON.parse(row.retry_counts),
     history: reviveHistory(row.history),
     runTokens: row.run_tokens,
+    localTokens: row.local_tokens ?? 0,
     agentNames: JSON.parse(row.agent_names),
     noMemory: row.no_memory === 1,
     pausedReason: row.paused_reason ?? undefined,
@@ -86,6 +90,7 @@ export class CheckpointStore {
         retry_counts  TEXT NOT NULL,
         history       TEXT NOT NULL,
         run_tokens    INTEGER NOT NULL,
+        local_tokens  INTEGER NOT NULL DEFAULT 0,
         agent_names   TEXT NOT NULL,
         no_memory     INTEGER NOT NULL,
         paused_reason TEXT,
@@ -109,6 +114,7 @@ export class CheckpointStore {
       ["project_name", "TEXT"],
       ["branch", "TEXT"],
       ["iteration", "INTEGER"],
+      ["local_tokens", "INTEGER NOT NULL DEFAULT 0"],
     ];
     for (const [name, decl] of added) {
       if (!cols.has(name)) this.db.exec(`ALTER TABLE runs ADD COLUMN ${name} ${decl}`);
@@ -121,15 +127,16 @@ export class CheckpointStore {
       .prepare(
         `INSERT INTO runs
            (run_id, task, status, current_index, retry_counts, history,
-            run_tokens, agent_names, no_memory, paused_reason, created_at, updated_at,
+            run_tokens, local_tokens, agent_names, no_memory, paused_reason, created_at, updated_at,
             project_name, branch, iteration)
          VALUES (@run_id, @task, @status, @current_index, @retry_counts, @history,
-                 @run_tokens, @agent_names, @no_memory, @paused_reason, @created_at, @updated_at,
+                 @run_tokens, @local_tokens, @agent_names, @no_memory, @paused_reason, @created_at, @updated_at,
                  @project_name, @branch, @iteration)
          ON CONFLICT(run_id) DO UPDATE SET
            status=excluded.status, current_index=excluded.current_index,
            retry_counts=excluded.retry_counts, history=excluded.history,
-           run_tokens=excluded.run_tokens, paused_reason=excluded.paused_reason,
+           run_tokens=excluded.run_tokens, local_tokens=excluded.local_tokens,
+           paused_reason=excluded.paused_reason,
            updated_at=excluded.updated_at, branch=excluded.branch,
            iteration=excluded.iteration`
       )
@@ -141,6 +148,7 @@ export class CheckpointStore {
         retry_counts: JSON.stringify(state.retryCounts),
         history: JSON.stringify(state.history),
         run_tokens: state.runTokens,
+        local_tokens: state.localTokens ?? 0,
         agent_names: JSON.stringify(state.agentNames),
         no_memory: state.noMemory ? 1 : 0,
         paused_reason: state.pausedReason ?? null,

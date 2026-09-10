@@ -37,6 +37,7 @@ function report(r: WorkspaceResult) {
     console.log(`✗ Failed after ${r.iterations} iteration(s). Branch ${r.branch} left for inspection.`);
     if (r.failureSummary) console.log(`\n${r.failureSummary}`);
   }
+  console.log(`  tokens: ${r.tokens.run} billable (Claude) · ${r.tokens.local} local (Ollama, free)`);
 }
 
 async function main() {

@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { runPipeline } from "./pipeline";
-import { AgentConfig, AgentOutput } from "../types";
+import { AgentConfig, AgentOutput, PipelineOptions } from "../types";
+import { CheckpointStore } from "../checkpoint/store";
+
+// Always inject an in-memory checkpoint store so tests never touch the on-disk
+// checkpoints.db (which otherwise pollutes real run history / stats).
+function run(task: string, opts: Omit<PipelineOptions, "checkpoint">) {
+  return runPipeline(task, { ...opts, checkpoint: new CheckpointStore(":memory:") });
+}
 
 // Mock the runner module
 vi.mock("./runner", () => ({
@@ -45,7 +52,7 @@ describe("runPipeline", () => {
         .mockResolvedValueOnce(successOutput("code"))
         .mockResolvedValueOnce(successOutput("tests"));
 
-      const results = await runPipeline("build an app", { agents });
+      const results = await run("build an app", { agents });
 
       expect(results).toHaveLength(3);
       expect(results[0].agentName).toBe("designer");
@@ -57,7 +64,7 @@ describe("runPipeline", () => {
       const agents = [makeAgent({ name: "designer" })];
       mockRunAgent.mockResolvedValueOnce(successOutput("spec"));
 
-      await runPipeline("my task", { agents });
+      await run("my task", { agents });
 
       expect(mockRunAgent).toHaveBeenCalledWith(
         agents[0],
@@ -78,7 +85,7 @@ describe("runPipeline", () => {
         .mockResolvedValueOnce(successOutput("spec"))
         .mockResolvedValueOnce(successOutput("code"));
 
-      await runPipeline("task", { agents });
+      await run("task", { agents });
 
       // Both agents were called in order
       expect(mockRunAgent).toHaveBeenCalledTimes(2);
@@ -105,7 +112,7 @@ describe("runPipeline", () => {
         .mockResolvedValueOnce(successOutput("v2 code"))        // engineer attempt 2
         .mockResolvedValueOnce(successOutput("tests pass"));    // tester approves
 
-      const results = await runPipeline("task", { agents });
+      const results = await run("task", { agents });
 
       expect(results).toHaveLength(4);
       expect(results[0].agentName).toBe("engineer");
@@ -129,7 +136,7 @@ describe("runPipeline", () => {
         .mockResolvedValueOnce(successOutput("v1"))        // engineer: attempt 1, sets retryCount=1
         .mockResolvedValueOnce(revisionOutput("fix it"));  // tester: rejects, retryCount(1) >= max(1) → moves on
 
-      const results = await runPipeline("task", { agents });
+      const results = await run("task", { agents });
 
       // Pipeline moves on after tester's first rejection since engineer hit max
       expect(results).toHaveLength(2);
@@ -153,7 +160,7 @@ describe("runPipeline", () => {
         .mockResolvedValueOnce(successOutput("v2"))
         .mockResolvedValueOnce(revisionOutput("still bad"));
 
-      const results = await runPipeline("task", { agents });
+      const results = await run("task", { agents });
 
       expect(results).toHaveLength(4);
       // Pipeline exhausted retries and moved on
@@ -170,7 +177,7 @@ describe("runPipeline", () => {
         .mockResolvedValueOnce(successOutput("code"))
         .mockResolvedValueOnce(revisionOutput("fix it"));
 
-      await expect(runPipeline("task", { agents })).rejects.toThrow(
+      await expect(run("task", { agents })).rejects.toThrow(
         'onRevision agent "nonexistent" not found'
       );
     });
@@ -185,7 +192,7 @@ describe("runPipeline", () => {
         .mockResolvedValueOnce(successOutput("spec"))
         .mockResolvedValueOnce({ status: "needs_revision", output: "", feedback: "hmm", reasoning: "unsure" });
 
-      const results = await runPipeline("task", { agents });
+      const results = await run("task", { agents });
 
       expect(results).toHaveLength(2);
       // Moves on since no onRevision
@@ -197,7 +204,7 @@ describe("runPipeline", () => {
       const agents = [makeAgent({ name: "designer" })];
       mockRunAgent.mockResolvedValueOnce(successOutput("spec"));
 
-      await runPipeline("task", { agents, noMemory: true });
+      await run("task", { agents, noMemory: true });
 
       expect(mockRunAgent).toHaveBeenCalledWith(
         agents[0],
@@ -212,7 +219,7 @@ describe("runPipeline", () => {
       const agents = [makeAgent({ name: "designer" })];
       mockRunAgent.mockResolvedValueOnce(successOutput("spec"));
 
-      await runPipeline("task", { agents });
+      await run("task", { agents });
 
       expect(mockRunAgent).toHaveBeenCalledWith(
         agents[0],
@@ -236,7 +243,7 @@ describe("runPipeline", () => {
         .mockResolvedValueOnce(successOutput("code"));
 
       const completedAgents: string[] = [];
-      await runPipeline("task", {
+      await run("task", {
         agents,
         onAgentComplete: (result) => completedAgents.push(result.agentName),
       });
@@ -250,7 +257,7 @@ describe("runPipeline", () => {
       const agents = [makeAgent({ name: "designer" })];
       mockRunAgent.mockResolvedValueOnce(successOutput("spec"));
 
-      const results = await runPipeline("task", { agents });
+      const results = await run("task", { agents });
 
       expect(results[0].agentName).toBe("designer");
       expect(results[0].timestamp).toBeInstanceOf(Date);
@@ -269,7 +276,7 @@ describe("runPipeline", () => {
         .mockResolvedValueOnce(successOutput("v2"))
         .mockResolvedValueOnce(successOutput("pass"));
 
-      const results = await runPipeline("task", { agents });
+      const results = await run("task", { agents });
 
       expect(results[0].agentName).toBe("engineer");
       expect(results[0].attempt).toBe(1);

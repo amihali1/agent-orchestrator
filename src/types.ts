@@ -5,6 +5,12 @@ export type Tier = "smart" | "cheap" | "local";
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
+  /**
+   * Whether these tokens count against the Claude budget. Defaults to true.
+   * Local (Ollama) inference is free, so it reports `false` — the tokens are still
+   * counted for visibility, but never consume the run/day cap.
+   */
+  billable?: boolean;
 }
 
 export interface AgentConfig {
