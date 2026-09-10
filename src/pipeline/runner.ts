@@ -1,4 +1,4 @@
-import { AgentConfig, AgentOutput, AgentResult, PipelineContext } from "../types";
+import { AgentConfig, AgentOutput, AgentResult, PipelineContext, Tier } from "../types";
 import { MemoryStore } from "../memory/store";
 import { getProvider, resolveTier } from "../providers/router";
 import { BudgetTracker } from "../budget/tracker";
@@ -23,14 +23,17 @@ export async function runAgent(
   attempt: number,
   noMemory = false,
   tracker?: BudgetTracker,
-  cachedPrefix?: string
+  cachedPrefix?: string,
+  tierOverride?: Tier
 ): Promise<AgentOutput> {
   const memories = noMemory ? [] : memory.recall(agent.name, context.task, MEMORY_RECALL_LIMIT);
   const previousResult = context.history[context.history.length - 1] as AgentResult | undefined;
 
   const userMessage = buildUserMessage(context.task, memories, previousResult);
 
-  const provider = getProvider(resolveTier(agent.name, agent.tier));
+  // A tierOverride bypasses resolveTier entirely, so it wins even over an env
+  // TIER_<AGENT> setting (used by cost-tiered retry to escalate mid-task).
+  const provider = getProvider(tierOverride ?? resolveTier(agent.name, agent.tier));
   const { output, usage } = await provider.complete({
     system: agent.systemPrompt,
     userMessage,
