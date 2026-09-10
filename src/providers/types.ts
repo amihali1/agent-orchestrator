@@ -86,6 +86,15 @@ export const OUTPUT_SCHEMA_PROMPT = `Respond with ONLY a single JSON object, no 
  * @param raw          Parsed structured output (tool_use input or parsed JSON), if any.
  * @param fallbackText Free-text the model emitted; used when `output` is missing/empty.
  */
+/** Coerce a model-supplied field to a string — some models return arrays/objects
+ *  (e.g. a JSON task array) where we expect text. Non-strings are JSON-stringified so
+ *  they stay usable downstream (and safe to persist). */
+function toText(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (v == null) return "";
+  return JSON.stringify(v);
+}
+
 export function parseAgentOutput(
   raw: Record<string, unknown> | undefined,
   fallbackText: string
@@ -93,9 +102,9 @@ export function parseAgentOutput(
   if (raw) {
     return {
       status: (raw.status as AgentOutput["status"]) ?? "success",
-      output: (raw.output as string) || fallbackText || "",
-      reasoning: (raw.reasoning as string) || "",
-      feedback: raw.feedback as string | undefined,
+      output: toText(raw.output) || fallbackText || "",
+      reasoning: toText(raw.reasoning),
+      feedback: raw.feedback == null ? undefined : toText(raw.feedback),
     };
   }
   // No structured output — treat free text as a successful deliverable.
