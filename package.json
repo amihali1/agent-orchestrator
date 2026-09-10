@@ -7,6 +7,7 @@
     "workspace": "tsx src/workspace-run.ts",
     "backlog": "tsx src/backlog-run.ts",
     "plan": "tsx src/plan-run.ts",
+    "bootstrap": "tsx src/bootstrap-run.ts",
     "agent": "tsx src/run-agent.ts",
     "scaffold": "tsx src/scaffold.ts",
     "build": "tsc",

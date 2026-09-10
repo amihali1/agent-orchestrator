@@ -37,6 +37,19 @@ function expandGates(command: CommandOrNull, dir: string): CommandOrNull {
   return command.replace(/\$\{GATES\}/g, gatesDir(dir));
 }
 
+/** Path a profile is stored at. */
+export function profilePath(name: string, dir = PROFILE_DIR): string {
+  return path.join(dir, `${name}.json`);
+}
+
+/** Write a profile to `<dir>/<name>.json` (used by bootstrap to register a new project). */
+export function saveProfile(name: string, profile: ProjectProfile, dir = PROFILE_DIR): string {
+  fs.mkdirSync(dir, { recursive: true });
+  const file = profilePath(name, dir);
+  fs.writeFileSync(file, JSON.stringify(profile, null, 2) + "\n");
+  return file;
+}
+
 /** Load and validate a project profile by name. */
 export function loadProfile(name: string, dir = PROFILE_DIR): ProjectProfile {
   const file = path.join(dir, `${name}.json`);
